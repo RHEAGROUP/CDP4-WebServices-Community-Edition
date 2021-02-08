@@ -127,13 +127,21 @@ namespace CDP4WebServices.API.ChangeNotification
 
                     foreach (var person in persons)
                     {
+                        if (!person.IsActive)
+                        {
+                            continue;
+                        }
+
                         var userPreferences = userPreferenceDao.Read(transaction, "SiteDirectory", person.UserPreference, true).ToList();
 
                         var changeLogSubscriptions = userPreferences.Where(x => x.ShortName.StartsWith("ChangeLogSubscriptions_")).ToList();
 
+                        // if a user is no longer a participant in a model, or if the participant is not active, then do not send report
+                        var participantDao = this.container.Resolve<IParticipantDao>();
 
+                        // if a model does not exist anyamore, do not send report
+                        var engineeringModelSetupDao = this.container.Resolve<IEngineeringModelSetupDao>();
                     }
-
                 }
                 catch (PostgresException postgresException)
                 {
