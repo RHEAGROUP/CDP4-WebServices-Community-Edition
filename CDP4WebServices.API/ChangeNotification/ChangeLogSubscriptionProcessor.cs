@@ -1,8 +1,8 @@
 ﻿// --------------------------------------------------------------------------------------------------------------------
-// <copyright file="Startup.cs" company="RHEA System S.A.">
+// <copyright file="ChangeLogSubscriptionProcessor.cs" company="RHEA System S.A.">
 //    Copyright (c) 2015-2021 RHEA System S.A.
 //
-//    Author: Sam Gerené, Alex Vorobiev, Alexander van Delft.
+//    Author: Sam Gerené, Alex Vorobiev, Alexander van Delft
 //
 //    This file is part of CDP4 Web Services Community Edition. 
 //    The CDP4 Web Services Community Edition is the RHEA implementation of ECSS-E-TM-10-25 Annex A and Annex C.
@@ -23,34 +23,19 @@
 // </copyright>
 // --------------------------------------------------------------------------------------------------------------------
 
-namespace CDP4WebServer
+namespace CDP4WebServices.API.ChangeNotification
 {
-    using Hangfire;
-    using Hangfire.MemoryStorage;
-
-    using Nancy;
-    using Nancy.Owin;
-
-    using Owin;
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Text;
+    using System.Threading.Tasks;
 
     /// <summary>
-    /// Provides the entry point for the ASP.NET application
+    /// The purpose of the <see cref="ChangeLogSubscriptionProcessor"/> is to process individual <see cref="ChangeLogSubscription"/>s
     /// </summary>
-    public class Startup
+    public class ChangeLogSubscriptionProcessor
     {
-        /// <summary>
-        /// Specifies how the ASP.NET application will respond to individual HTTP requests.
-        /// </summary>
-        /// <param name="app">
-        /// Application pipeline
-        /// </param>
-        public void Configuration(IAppBuilder app)
-        {
-            GlobalConfiguration.Configuration.UseMemoryStorage();
-            app.UseHangfireDashboard("/hangfire");
-            app.UseHangfireServer();
-
-            app.UseNancy(options => options.PassThroughWhenStatusCodesAre(HttpStatusCode.NotFound));
-        }
+        
     }
 }
