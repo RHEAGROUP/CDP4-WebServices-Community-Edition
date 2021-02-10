@@ -151,7 +151,7 @@ namespace CDP4WebServices.API
             var builder = new ContainerBuilder();
             builder.RegisterType<ChangeNoticationService>().InstancePerBackgroundJob();
             GlobalConfiguration.Configuration.UseAutofacActivator(builder.Build());
-            RecurringJob.AddOrUpdate<ChangeNoticationService>("ChangeNotificationService.Execute", notificationService => notificationService.Execute(), Cron.Daily(18));
+            RecurringJob.AddOrUpdate<ChangeNoticationService>("ChangeNotificationService.Execute", notificationService => notificationService.Execute(), Cron.Weekly(DayOfWeek.Monday, 0, 15));
             Logger.Info("Cron jobs configured");
         }
 

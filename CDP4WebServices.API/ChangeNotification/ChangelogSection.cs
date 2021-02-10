@@ -1,23 +1,24 @@
 ﻿// --------------------------------------------------------------------------------------------------------------------
-// <copyright file="ChangeNotificationSubscriptionType.cs" company="RHEA System S.A.">
+// <copyright file="ChangelogSection.cs" company="RHEA System S.A.">
 //    Copyright (c) 2015-2021 RHEA System S.A.
-//
-//    Author: Sam Gerené, Alex Vorobiev, Alexander van Delft
-//
-//    This file is part of CDP4 Web Services Community Edition. 
+// 
+//    Author: Sam Gerené, Merlin Bieze, Alex Vorobiev, Naron Phou, Alexander van Delft, Nathanael Smiechowski,
+//                 Ahmed Abulwafa Ahmed
+// 
+//    This file is part of CDP4 Web Services Community Edition.
 //    The CDP4 Web Services Community Edition is the RHEA implementation of ECSS-E-TM-10-25 Annex A and Annex C.
 //    This is an auto-generated class. Any manual changes to this file will be overwritten!
-//
+// 
 //    The CDP4 Web Services Community Edition is free software; you can redistribute it and/or
 //    modify it under the terms of the GNU Affero General Public
 //    License as published by the Free Software Foundation; either
 //    version 3 of the License, or (at your option) any later version.
-//
+// 
 //    The CDP4 Web Services Community Edition is distributed in the hope that it will be useful,
 //    but WITHOUT ANY WARRANTY; without even the implied warranty of
 //    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-//    GNU Affero General Public License for more details.
-//
+//    Lesser General Public License for more details.
+// 
 //    You should have received a copy of the GNU Affero General Public License
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // </copyright>
@@ -25,43 +26,37 @@
 
 namespace CDP4WebServices.API.ChangeNotification
 {
-    using CDP4Common.CommonData;
-    using CDP4Common.EngineeringModelData;
-    using CDP4Common.SiteDirectoryData;
-
     /// <summary>
-    /// The type of <see cref="ChangeNotificationSubscription"/>
+    /// Defines data to be used to compose html/text in a structured form for layout purposes
     /// </summary>
-    public enum ChangeNotificationSubscriptionType
+    public class ChangelogSection
     {
         /// <summary>
-        /// Assertion that the <see cref="ChangeNotificationSubscription"/> is on a <see cref="INamedThing"/>
+        /// The title
         /// </summary>
-        NamedThing,
+        public string Title { get; private set; }
 
         /// <summary>
-        /// Assertion that the <see cref="ChangeNotificationSubscription"/> is on a <see cref="ICategorizableThing"/>
+        /// The subtitle
         /// </summary>
-        Category,
+        public string SubTitle { get; private set; }
 
         /// <summary>
-        /// Assertion that the <see cref="ChangeNotificationSubscription"/> is on a <see cref="IOwnedThing"/>
+        /// The description
         /// </summary>
-        OwnedThing,
+        public string Description { get; private set; }
 
         /// <summary>
-        /// Assertion that the <see cref="ChangeNotificationSubscription"/> is on a <see cref="ParameterType"/>
+        /// Creates a new instance of the <see cref="ChangelogSection"/> class
         /// </summary>
-        ParameterType,
-
-        /// <summary>
-        /// Assertion that the <see cref="ChangeNotificationSubscription"/> is on a <see cref="ParameterSubscription"/>
-        /// </summary>
-        ParameterSubscription,
-
-        /// <summary>
-        /// Assertion that the <see cref="ChangeNotificationSubscription"/> is on a <see cref="Parameter"/>
-        /// </summary>
-        Parameter
+        /// <param name="title">The title</param>
+        /// <param name="subTitle">The subtitle </param>
+        /// <param name="description">The description</param>
+        public ChangelogSection(string title, string subTitle, string description)
+        {
+            this.Title = title;
+            this.SubTitle = subTitle;
+            this.Description = description;
+        }
     }
 }

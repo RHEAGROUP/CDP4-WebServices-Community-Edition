@@ -47,10 +47,6 @@
   </ItemGroup>
   
   <ItemGroup>
-    <Folder Include="ChangeNotification\" />
-  </ItemGroup>
-  
-  <ItemGroup>
     <EmbeddedResource Include="Resources\cdplogo_48x48.ico">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </EmbeddedResource>

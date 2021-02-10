@@ -26,24 +26,31 @@
 namespace CDP4WebServices.API.ChangeNotification
 {
     using System;
+    using System.Collections.Generic;
     using System.Data;
     using System.Diagnostics;
     using System.Linq;
+    using System.Text;
     using System.Threading.Tasks;
 
     using Autofac;
-    
+
+    using CDP4Common.DTO;
+
     using CDP4JsonSerializer;
 
     using CDP4Orm.Dao;
     using CDP4Orm.Dao.Resolve;
 
+    using CDP4WebServices.API.ChangeNotification.Data;
+    using CDP4WebServices.API.ChangeNotification.UserPreference;
     using CDP4WebServices.API.Configuration;
     using CDP4WebServices.API.Services;
     using CDP4WebServices.API.Services.Email;
 
+    using Newtonsoft.Json;
+
     using NLog;
-    using NLog.Fluent;
 
     using Npgsql;
 
@@ -73,11 +80,11 @@ namespace CDP4WebServices.API.ChangeNotification
         /// <summary>
         /// Register the required services to interact with the database
         /// </summary>
-        /// <returns></returns>
         public IContainer RegisterServices()
         {
             var builder = new ContainerBuilder();
 
+            //wireup data model utils
             builder.RegisterTypeAsPropertyInjectedSingleton<DataModelUtils, IDataModelUtils>();
 
             // wireup command logger for this request
@@ -92,9 +99,16 @@ namespace CDP4WebServices.API.ChangeNotification
             // the ResolveDao is used to get type info on any Thing instance based on it's unique identifier
             builder.RegisterTypeAsPropertyInjectedSingleton<ResolveDao, IResolveDao>();
 
+            // The ChanglogRetriever retrieves changelog data from the database
+            builder.RegisterTypeAsPropertyInjectedSingleton<ModelLogEntryDataCreator, IModelLogEntryDataCreator>();
+
+            // The ChanglogRetriever retrieves changelog data from the database
+            builder.RegisterTypeAsPropertyInjectedSingleton<ChangelogBodyComposer, IChangelogBodyComposer>();
+
             // wireup DAO classes
             builder.RegisterDerivedTypesAsPropertyInjectedSingleton<BaseDao>();
 
+            // Used to send emails
             builder.RegisterTypeAsPropertyInjectedSingleton<EmailService, IEmailService>();
 
             return builder.Build();
@@ -103,14 +117,14 @@ namespace CDP4WebServices.API.ChangeNotification
         /// <summary>
         /// Executes the <see cref="ChangeNoticationService"/>, processes all 
         /// </summary>
-        /// <returns></returns>
+        /// <returns>
+        /// An awaitable <see cref="Task"/>
+        /// </returns>
         public async Task Execute()
         {
-            NpgsqlConnection connection = null;
-            NpgsqlTransaction transaction = null;
             var sw = Stopwatch.StartNew();
 
-            connection = new NpgsqlConnection(Services.Utils.GetConnectionString(AppConfig.Current.Backtier.Database));
+            var connection = new NpgsqlConnection(Services.Utils.GetConnectionString(AppConfig.Current.Backtier.Database));
 
             // ensure an open connection
             if (connection.State != ConnectionState.Open)
@@ -118,34 +132,69 @@ namespace CDP4WebServices.API.ChangeNotification
                 try
                 {
                     connection.Open();
-                    transaction = connection.BeginTransaction();
+                    var transaction = connection.BeginTransaction();
 
                     var personDao = this.container.Resolve<IPersonDao>();
-                    var userPreferenceDao = this.container.Resolve<IUserPreferenceDao>();
 
                     var persons = personDao.Read(transaction, "SiteDirectory", null, true).ToList();
 
                     foreach (var person in persons)
                     {
+                        var changelogBodyComposer = this.container.Resolve<IChangelogBodyComposer>();
+
                         if (!person.IsActive)
                         {
                             continue;
                         }
 
-                        var userPreferences = userPreferenceDao.Read(transaction, "SiteDirectory", person.UserPreference, true).ToList();
+                        var emailAddresses = this.GetEmailAdressess(transaction, person).ToList();
 
-                        var changeLogSubscriptions = userPreferences.Where(x => x.ShortName.StartsWith("ChangeLogSubscriptions_")).ToList();
+                        if (!emailAddresses.Any())
+                        {
+                            continue;
+                        }
 
-                        // if a user is no longer a participant in a model, or if the participant is not active, then do not send report
-                        var participantDao = this.container.Resolve<IParticipantDao>();
+                        var changeNotificationSubscriptionUserPreferences = this.GetChangeLogSubscriptionUserPreferences(transaction, person);
 
-                        // if a model does not exist anyamore, do not send report
-                        var engineeringModelSetupDao = this.container.Resolve<IEngineeringModelSetupDao>();
+                        var endDateTime = this.GetEndDateTime(DayOfWeek.Monday);
+                        var startDateTime = endDateTime.AddDays(-7);
+                        var htmlStringBuilder = new StringBuilder();
+                        var textStringBuilder = new StringBuilder();
+                        var subject = $"Weekly Changelog from server '{AppConfig.Current.Midtier.HostName}'";
+                        htmlStringBuilder.AppendLine($"<h3>{subject}<br />{startDateTime:R} - {endDateTime:R}</h3>");
+                        textStringBuilder.AppendLine($"{subject}\n{startDateTime:R} - {endDateTime:R}");
+
+                        foreach (var changeNotificationSubscriptionUserPreference in changeNotificationSubscriptionUserPreferences)
+                        {
+                            if (changeNotificationSubscriptionUserPreference.Value.ChangeNotificationSubscriptions.Any()
+                                && changeNotificationSubscriptionUserPreference.Value.ChangeNotificationReportType != ChangeNotificationReportType.None)
+                            {
+                                var changelogSections = changelogBodyComposer.CreateChangelogSections(
+                                    transaction,
+                                    this.container,
+                                    Guid.Parse(changeNotificationSubscriptionUserPreference.Key),
+                                    person,
+                                    changeNotificationSubscriptionUserPreference.Value,
+                                    startDateTime,
+                                    endDateTime
+                                ).ToList();
+
+                                htmlStringBuilder.Append(changelogBodyComposer.CreateHtmlBody(changelogSections));
+                                textStringBuilder.Append(changelogBodyComposer.CreateTextBody(changelogSections));
+                            }
+                        }
+
+                        var emailService = this.container.Resolve<IEmailService>();
+                        await emailService.Send(emailAddresses, subject, textStringBuilder.ToString(), htmlStringBuilder.ToString());
                     }
                 }
                 catch (PostgresException postgresException)
                 {
                     Logger.Error("Could not connect to the database to process Change Notifications. Error message: {0}", postgresException.Message);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex);
                 }
                 finally
                 {
@@ -157,6 +206,94 @@ namespace CDP4WebServices.API.ChangeNotification
                     Logger.Info($"ChangeNotifications processed in {sw.ElapsedMilliseconds} [ms]");
                 }
             }
+        }
+
+        /// <summary>
+        /// Retrieves a <see cref="Person"/>'s <see cref="EmailAddress"/>es used to send the change log email to
+        /// </summary>
+        /// <param name="transaction">
+        /// The current <see cref="NpgsqlTransaction"/> to the database.
+        /// </param>
+        /// <param name="person">
+        /// The <see cref="Person"/>
+        /// </param>
+        /// <returns>
+        /// An <see cref="IEnumerable{T}"/> of type <see cref="EmailAddress"/>
+        /// </returns>
+        private IEnumerable<EmailAddress> GetEmailAdressess(NpgsqlTransaction transaction, Person person)
+        {
+            if (!person.EmailAddress.Any())
+            {
+                yield break;
+            }
+
+            var emailAddressDao = this.container.Resolve<IEmailAddressDao>();
+            var emailAddresses = emailAddressDao.Read(transaction, "SiteDirectory", person.EmailAddress).ToList();
+
+            if (!emailAddresses.Any())
+            {
+                yield break;
+            }
+
+            if (person.DefaultEmailAddress != null && emailAddresses.Any(x => x.Iid == person.DefaultEmailAddress.Value))
+            {
+                yield return emailAddresses.Single(x => x.Iid == person.DefaultEmailAddress.Value);
+            }
+            else
+            {
+                yield return emailAddresses.First();
+            }
+        }
+
+        /// <summary>
+        /// Gets the end <see cref="DateTime"/> of the period in which we want to find change log data
+        /// </summary>
+        /// <param name="dayOfWeek">
+        /// The <see cref="DayOfWeek"/> for which to return the end <see cref="DateTime"/>
+        /// </param>
+        /// <returns>
+        /// The end <see cref="DateTime"/>
+        /// </returns>
+        private DateTime GetEndDateTime(DayOfWeek dayOfWeek)
+        {
+            var dt = DateTime.UtcNow;
+            var diff = (7 + (dt.DayOfWeek - dayOfWeek)) % 7;
+            return dt.AddDays(-1 * diff).Date;
+        }
+
+        /// <summary>
+        /// Gets a <see cref="Dictionary{TKey, TValue}"/> of type <see cref="string"/> and <see cref="ChangeNotificationSubscriptionUserPreference"/>
+        /// </summary>
+        /// <param name="transaction">
+        /// The <see cref="NpgsqlConnection"/> to the database
+        /// </param>
+        /// <param name="person">
+        /// The <see cref="Person"/>
+        /// </param>
+        /// <returns>
+        /// A <see cref="Dictionary{TKey, TValue}"/> of type <see cref="string"/> and <see cref="ChangeNotificationSubscriptionUserPreference"/>
+        /// </returns>
+        private Dictionary<string, ChangeNotificationSubscriptionUserPreference> GetChangeLogSubscriptionUserPreferences(NpgsqlTransaction transaction, Person person)
+        {
+            var userPreferenceDao = this.container.Resolve<IUserPreferenceDao>();
+
+            var changeLogSubscriptions = new Dictionary<string, ChangeNotificationSubscriptionUserPreference>();
+
+            var userPreferences =
+                userPreferenceDao
+                    .Read(transaction, "SiteDirectory", person.UserPreference, true)
+                    .Where(x => x.ShortName.StartsWith("ChangeLogSubscriptions_"))
+                    .ToList();
+
+            foreach (var userPreference in userPreferences)
+            {
+                var engineeringModelSuffix = userPreference.ShortName.Replace("ChangeLogSubscriptions_", "");
+                var changeNotificationSubscriptionUserPreference = JsonConvert.DeserializeObject<ChangeNotificationSubscriptionUserPreference>(userPreference.Value);
+
+                changeLogSubscriptions.Add(engineeringModelSuffix, changeNotificationSubscriptionUserPreference);
+            }
+
+            return changeLogSubscriptions;
         }
     }
 }

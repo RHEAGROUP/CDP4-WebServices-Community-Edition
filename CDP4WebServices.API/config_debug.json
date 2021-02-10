@@ -20,11 +20,11 @@
     "IsDbRestoreEnabled": false
   },
   "EmailService": {
-    "Sender":  "CDP4" ,
-    "SMTP": "smpt.cdp4.org",
+    "Sender": "CDP4CEFO",
+    "SMTP": "smtp.gmail.com",
     "Port": 587,
-    "UserName": "cdp4postmaster-username",
-    "Password": "cdp4postmaster-password"
+    "UserName": "lxmobi1@gmail.com",
+    "Password": "Fmda2020##"
   },
   "Defaults": {
     "PersonPassword": "pass",
